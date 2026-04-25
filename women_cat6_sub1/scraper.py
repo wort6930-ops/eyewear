@@ -70,10 +70,38 @@ class BoutiqaatScraper:
                 
                 # Only apply infinite scroll for listing pages (/l/), not product detail pages (/p/)
                 if '/l/' in url:
-                    # Wait for initial products to load
-                    page.wait_for_selector('div.single-product-wrap', timeout=30000)
+                    # Wait for initial products to load - try multiple selectors with fallback
+                    product_selectors = [
+                        'div.single-product-wrap',
+                        'div.product-item',
+                        'div.product-card',
+                        'div[class*="product"]',
+                        'li.product',
+                    ]
+                    found_selector = None
+                    for selector in product_selectors:
+                        try:
+                            page.wait_for_selector(selector, timeout=30000)
+                            found_selector = selector
+                            logger.info(f"Products found using selector: {selector}")
+                            break
+                        except Exception:
+                            logger.warning(f"Selector '{selector}' not found, trying next...")
+                    
+                    if not found_selector:
+                        # Last resort: wait for network idle and continue anyway
+                        logger.warning("No product selector matched — waiting for network idle and continuing")
+                        try:
+                            page.wait_for_load_state('networkidle', timeout=30000)
+                        except Exception:
+                            pass
+                    
                     time.sleep(6)
                     
+                    # Use the matched selector for scroll counting, default to original
+                    scroll_selector = found_selector or 'div.single-product-wrap'
+                    js_count = f"document.querySelectorAll('{scroll_selector}').length"
+
                     # Infinite scroll handling
                     logger.info("Starting infinite scroll...")
                     no_change_count = 0
@@ -82,7 +110,7 @@ class BoutiqaatScraper:
                     
                     while attempt < max_attempts:
                         # Count current products BEFORE scrolling
-                        current_count = page.evaluate("document.querySelectorAll('div.single-product-wrap').length")
+                        current_count = page.evaluate(js_count)
                         
                         # Scroll to bottom
                         page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
@@ -97,7 +125,7 @@ class BoutiqaatScraper:
                             time.sleep(3)
                         
                         # Count products AFTER scrolling
-                        new_count = page.evaluate("document.querySelectorAll('div.single-product-wrap').length")
+                        new_count = page.evaluate(js_count)
                         
                         logger.info(f"Scroll attempt {attempt + 1}: {current_count} -> {new_count} products")
                         
@@ -111,7 +139,7 @@ class BoutiqaatScraper:
                         
                         attempt += 1
                     
-                    final_count = page.evaluate("document.querySelectorAll('div.single-product-wrap').length")
+                    final_count = page.evaluate(js_count)
                     logger.info(f"Scroll complete. Total products found: {final_count}")
                 else:
                     # For product detail pages, just wait for content to load
