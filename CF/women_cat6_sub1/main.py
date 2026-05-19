@@ -52,6 +52,24 @@ class BoutiqaatDataPipeline:
         logger.info("=" * 80)
         logger.info("Starting Boutiqaat Data Pipeline (Async – Semaphore=3)")
         logger.info("=" * 80)
+
+        # Validate required environment variables before doing anything
+        required_env = {
+            'CF_R2_BUCKET_NAME': os.getenv('CF_R2_BUCKET_NAME', ''),
+            'CF_R2_ENDPOINT_URL': os.getenv('CF_R2_ENDPOINT_URL', ''),
+            'CF_R2_ACCESS_KEY_ID': os.getenv('CF_R2_ACCESS_KEY_ID', ''),
+            'CF_R2_SECRET_ACCESS_KEY': os.getenv('CF_R2_SECRET_ACCESS_KEY', ''),
+        }
+        missing = [k for k, v in required_env.items() if not v.strip()]
+        if missing:
+            logger.error(
+                "Missing or empty required environment variable(s): %s\n"
+                "Set these as GitHub Actions secrets in your repository "
+                "(Settings → Secrets and variables → Actions).",
+                ', '.join(missing)
+            )
+            return False
+
         try:
             if not self.uploader.test_connection():
                 logger.error("S3 connection failed. Exiting.")
